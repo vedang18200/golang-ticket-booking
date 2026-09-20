@@ -1,0 +1,52 @@
+directive @hasRole(role: Role!) on FIELD_DEFINITION
+
+scalar Time
+
+enum Role { USER ADMIN }
+enum BookingStatus { PENDING CONFIRMED CANCELLED EXPIRED }
+
+type User { id: ID! email: String! role: Role! }
+type AuthPayload { token: String! user: User! }
+
+type Venue { id: ID! name: String! city: String! }
+type Seat { id: ID! section: String! row: String! number: Int! }
+
+# venue + seats per event are where your N+1 will show up -> DataLoader
+type Event {
+  id: ID!
+  title: String!
+  startsAt: Time!
+  venue: Venue!
+  seats: [EventSeat!]!
+}
+
+type EventSeat { seat: Seat! available: Boolean! }
+
+type Booking {
+  id: ID!
+  event: Event!
+  seat: Seat!
+  status: BookingStatus!
+  createdAt: Time!
+}
+
+type SeatUpdate { seatId: ID! available: Boolean! }
+
+type Query {
+  events: [Event!]!
+  event(id: ID!): Event
+  myBookings: [Booking!]! @hasRole(role: USER)
+}
+
+type Mutation {
+  register(email: String!, password: String!): AuthPayload!
+  login(email: String!, password: String!): AuthPayload!
+  createEvent(title: String!, venueId: ID!, startsAt: Time!): Event! @hasRole(role: ADMIN)
+  # conflict must return error extensions.code = "SEAT_TAKEN" (the k6 test counts on it)
+  createBooking(eventId: ID!, seatId: ID!): Booking! @hasRole(role: USER)
+  cancelBooking(id: ID!): Booking! @hasRole(role: USER)
+}
+
+type Subscription {
+  seatAvailability(eventId: ID!): SeatUpdate!
+}
